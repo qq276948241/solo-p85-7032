@@ -33,3 +33,4 @@ ENV/
 .env.*
 node_modules/
 dist/
+uploads/
