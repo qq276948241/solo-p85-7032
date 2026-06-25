@@ -5,10 +5,16 @@ from pydantic import BaseModel, Field
 from app.models.models import ReminderStatus, ReminderChannel
 
 
+# 未接种宠物的约定值（不改变字段类型，只填约定内容，保证前端完全不用改）
+UNVACCINATED_MARK = "未接种（请尽快安排首次免疫）"
+UNVACCINATED_DATE_SENTINEL = date(1970, 1, 1)
+UNVACCINATED_DAYS_SENTINEL = -99999
+
+
 class VaccineDueItem(BaseModel):
     """单条即将到期/已过期的疫苗提醒明细"""
 
-    vaccine_id: int = Field(description="疫苗记录ID")
+    vaccine_id: Optional[int] = Field(default=None, description="疫苗记录ID，未接种过的宠物为None")
     pet_id: int = Field(description="宠物ID")
     pet_name: str = Field(description="宠物名字")
     pet_species: Optional[str] = Field(default=None, description="物种（狗/猫/...）")
@@ -23,11 +29,12 @@ class VaccineDueItem(BaseModel):
     store_id: Optional[int] = Field(default=None, description="最近预约关联门店ID（可能为空）")
     store_name: Optional[str] = Field(default=None, description="最近预约关联门店名")
 
-    vaccine_name: str = Field(description="该打哪种疫苗")
-    vaccinated_date: date = Field(description="上次接种时间")
-    expiry_date: date = Field(description="到期时间")
-    days_to_expiry: int = Field(description="距离到期天数，负数表示已过期天数")
+    vaccine_name: str = Field(description="该打哪种疫苗，未接种宠物填'未接种（请尽快安排首次免疫）'")
+    vaccinated_date: date = Field(description="上次接种时间，未接种宠物填1970-01-01约定值")
+    expiry_date: date = Field(description="到期时间，未接种宠物填1970-01-01约定值")
+    days_to_expiry: int = Field(description="距离到期天数，负数=已过期，-99999=从未接种")
     is_expired: bool = Field(description="是否已过期")
+    is_unvaccinated: bool = Field(default=False, description="是否从未接种过疫苗，新增字段（向后兼容，默认False）")
 
 
 class VaccineDueQuery(BaseModel):
@@ -36,6 +43,7 @@ class VaccineDueQuery(BaseModel):
     store_id: Optional[int] = Field(default=None, description="按门店过滤，空=全部门店")
     within_days: int = Field(default=30, ge=1, le=365, description="未来 N 天内到期，默认30天")
     include_expired: bool = Field(default=True, description="是否包含已经过期的疫苗")
+    include_unvaccinated: bool = Field(default=True, description="是否包含从未接种过疫苗的宠物")
     include_only_not_acknowledged: bool = Field(
         default=False, description="仅返回尚未被确认/忽略的提醒"
     )

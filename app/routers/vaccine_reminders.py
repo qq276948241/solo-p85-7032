@@ -63,6 +63,7 @@ def get_due_vaccines(
     store_id: Optional[int] = Query(default=None, description="门店ID，空=全部门店"),
     within_days: int = Query(default=30, ge=1, le=365, description="未来 N 天内到期"),
     include_expired: bool = Query(default=True, description="是否包含已经过期的疫苗"),
+    include_unvaccinated: bool = Query(default=True, description="是否包含从未接种过疫苗的宠物"),
     include_only_not_acknowledged: bool = Query(default=False, description="仅返回尚未处理的"),
     keyword: Optional[str] = Query(default=None, description="关键词搜索：宠物名/主人名/电话"),
     db: Session = Depends(get_db),
@@ -71,6 +72,7 @@ def get_due_vaccines(
         store_id=store_id,
         within_days=within_days,
         include_expired=include_expired,
+        include_unvaccinated=include_unvaccinated,
         include_only_not_acknowledged=include_only_not_acknowledged,
         keyword=keyword,
     )
