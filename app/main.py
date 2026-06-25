@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine
-from app.routers import store, owner, pet, booking, care, employee
+from app.routers import store, owner, pet, booking, care, employee, vaccine_reminders
 
 
 def create_app() -> FastAPI:
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(booking.router)
     app.include_router(care.router)
     app.include_router(employee.router)
+    app.include_router(vaccine_reminders.router)
 
     return app
 

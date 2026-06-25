@@ -252,6 +252,39 @@ CREATE TABLE IF NOT EXISTS care_photos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ========================================
+-- 疫苗提醒记录表
+-- ========================================
+CREATE TABLE IF NOT EXISTS vaccination_reminders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vaccine_id INT NOT NULL,
+    pet_id INT NOT NULL,
+    owner_id INT NOT NULL,
+    store_id INT,
+    vaccine_name VARCHAR(100) NOT NULL,
+    expiry_date DATE NOT NULL,
+    days_to_expiry INT NOT NULL,
+    is_expired TINYINT(1) DEFAULT 0,
+    status ENUM('pending', 'notified', 'acknowledged', 'ignored') DEFAULT 'pending',
+    channel ENUM('wechat', 'sms', 'phone', 'in_app', 'manual') DEFAULT 'manual',
+    notified_at DATETIME,
+    notified_by INT,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_vaccine (vaccine_id),
+    INDEX idx_pet (pet_id),
+    INDEX idx_owner (owner_id),
+    INDEX idx_store (store_id),
+    INDEX idx_expiry (expiry_date),
+    INDEX idx_status (status),
+    INDEX idx_expired (is_expired),
+    CONSTRAINT fk_reminder_vaccine FOREIGN KEY (vaccine_id) REFERENCES vaccines(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reminder_pet FOREIGN KEY (pet_id) REFERENCES pets(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reminder_owner FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reminder_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========================================
 -- 插入三家门店种子数据
 -- ========================================
 INSERT INTO stores (name, address, phone, capacity, status, daily_rate, hourly_rate) VALUES

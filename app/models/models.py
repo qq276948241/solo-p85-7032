@@ -70,6 +70,21 @@ class StoolStatus(str, enum.Enum):
     NONE = "none"
 
 
+class ReminderChannel(str, enum.Enum):
+    WECHAT = "wechat"
+    SMS = "sms"
+    PHONE = "phone"
+    IN_APP = "in_app"
+    MANUAL = "manual"
+
+
+class ReminderStatus(str, enum.Enum):
+    PENDING = "pending"
+    NOTIFIED = "notified"
+    ACKNOWLEDGED = "acknowledged"
+    IGNORED = "ignored"
+
+
 class Store(Base):
     __tablename__ = "stores"
 
@@ -307,4 +322,30 @@ class CarePhoto(Base):
     caption = Column(String(255))
     created_at = Column(DateTime, default=datetime.now)
 
-    care_record = relationship("CareRecord", back_populates="photos")
+    care_record = relationship("CarePhoto", back_populates="photos")
+
+
+class VaccinationReminder(Base):
+    __tablename__ = "vaccination_reminders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vaccine_id = Column(Integer, ForeignKey("vaccines.id"), nullable=False, index=True)
+    pet_id = Column(Integer, ForeignKey("pets.id"), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("owners.id"), nullable=False, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), index=True)
+    vaccine_name = Column(String(100), nullable=False)
+    expiry_date = Column(Date, nullable=False, index=True)
+    days_to_expiry = Column(Integer, nullable=False)
+    is_expired = Column(Boolean, default=False, index=True)
+    status = Column(Enum(ReminderStatus), default=ReminderStatus.PENDING, index=True)
+    channel = Column(Enum(ReminderChannel), default=ReminderChannel.MANUAL)
+    notified_at = Column(DateTime)
+    notified_by = Column(Integer)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    vaccine = relationship("Vaccine")
+    pet = relationship("Pet")
+    owner = relationship("Owner")
+    store = relationship("Store")
