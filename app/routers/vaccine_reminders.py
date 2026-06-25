@@ -9,29 +9,31 @@
 - PATCH  /api/vaccine-reminders/{id}/notified   标记「已通知主人」
 - PATCH  /api/vaccine-reminders/{id}/acknowledged  主人确认收到/已安排打针
 - PATCH  /api/vaccine-reminders/{id}/ignored    忽略此提醒
+
+⚠️ 本文件只负责：接请求 → 参数校验 → 调用 service → 返回结果
+所有业务逻辑（日期判断、过期判定、查询组装、数据填充）都在 app/services/vaccination_service.py
 """
 
 from typing import Optional, List
-from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import ReminderStatus, ReminderChannel, Pet, Owner
+from app.models.models import ReminderStatus
 from app.schemas.vaccine_reminder import (
     VaccineDueQuery, VaccineDueResult,
     VaccineReminderCreate, VaccineReminderResp,
     VaccineReminderMarkNotified, VaccineReminderStats,
 )
 from app.schemas.common import ApiResponse
-from app.services import vaccine_reminder_service as svc
+from app.services import vaccination_service as svc
 
 router = APIRouter(prefix="/api/vaccine-reminders", tags=["疫苗提醒"])
 
 
 # ---------------------------------------------------------------------------
-# 实时动态查询（核心接口：查哪些宠物疫苗快到期了）
+# 实时动态查询
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -72,12 +74,11 @@ def get_due_vaccines(
         include_only_not_acknowledged=include_only_not_acknowledged,
         keyword=keyword,
     )
-    result = svc.find_due_vaccines(db, query)
-    return ApiResponse(data=result)
+    return ApiResponse(data=svc.find_due_vaccines(db, query))
 
 
 # ---------------------------------------------------------------------------
-# 生成提醒记录（批量落库）—— 供定时任务 / 管理员一键生成调用
+# 批量生成提醒记录
 # ---------------------------------------------------------------------------
 
 @router.post(
@@ -97,7 +98,7 @@ def generate_reminders(
     body: VaccineReminderCreate,
     db: Session = Depends(get_db),
 ):
-    count, records = svc.generate_reminder_records(
+    count, ids = svc.generate_reminder_records(
         db,
         store_id=body.store_id,
         within_days=body.within_days,
@@ -106,12 +107,12 @@ def generate_reminders(
     )
     return ApiResponse(
         message=f"已生成 {count} 条提醒记录",
-        data={"count": count, "ids": [r.id for r in records]},
+        data={"count": count, "ids": ids},
     )
 
 
 # ---------------------------------------------------------------------------
-# 查询提醒记录（按状态 / 门店 / 是否超期等）
+# 查询提醒记录
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -130,21 +131,11 @@ def list_records(
     owner_id: Optional[int] = Query(default=None, description="按主人过滤"),
     db: Session = Depends(get_db),
 ):
-    records = svc.list_reminder_records(
+    data = svc.list_reminder_records(
         db, store_id=store_id, status=status,
         only_expired=only_expired, owner_id=owner_id,
     )
-    resp = []
-    for r in records:
-        obj = VaccineReminderResp.model_validate(r)
-        pet = db.query(Pet).filter(Pet.id == r.pet_id).first()
-        owner = db.query(Owner).filter(Owner.id == r.owner_id).first()
-        if pet:
-            obj.pet_name = pet.name
-        if owner:
-            obj.owner_phone = owner.phone
-        resp.append(obj)
-    return ApiResponse(data=resp)
+    return ApiResponse(data=data)
 
 
 # ---------------------------------------------------------------------------
@@ -161,12 +152,11 @@ def get_reminder_stats(
     store_id: Optional[int] = Query(default=None, description="门店过滤"),
     db: Session = Depends(get_db),
 ):
-    stats = svc.get_stats(db, store_id=store_id)
-    return ApiResponse(data=stats)
+    return ApiResponse(data=svc.get_stats(db, store_id=store_id))
 
 
 # ---------------------------------------------------------------------------
-# 单条记录状态流转
+# 状态流转
 # ---------------------------------------------------------------------------
 
 @router.patch(
@@ -180,23 +170,16 @@ def mark_notified(
     body: VaccineReminderMarkNotified,
     db: Session = Depends(get_db),
 ):
-    rec = svc.mark_as_notified(
+    result = svc.mark_as_notified(
         db,
         reminder_id=reminder_id,
         channel=body.channel,
         note=body.note,
         notified_by=body.notified_by,
     )
-    if not rec:
+    if result is None:
         raise HTTPException(status_code=404, detail="提醒记录不存在")
-    obj = VaccineReminderResp.model_validate(rec)
-    pet = db.query(Pet).filter(Pet.id == rec.pet_id).first()
-    owner = db.query(Owner).filter(Owner.id == rec.owner_id).first()
-    if pet:
-        obj.pet_name = pet.name
-    if owner:
-        obj.owner_phone = owner.phone
-    return ApiResponse(data=obj)
+    return ApiResponse(data=result)
 
 
 @router.patch(
@@ -210,17 +193,10 @@ def mark_acknowledged(
     note: Optional[str] = Body(default=None, description="备注，例如主人回复本周六来"),
     db: Session = Depends(get_db),
 ):
-    rec = svc.mark_as_acknowledged(db, reminder_id, note=note)
-    if not rec:
+    result = svc.mark_as_acknowledged(db, reminder_id, note=note)
+    if result is None:
         raise HTTPException(status_code=404, detail="提醒记录不存在")
-    obj = VaccineReminderResp.model_validate(rec)
-    pet = db.query(Pet).filter(Pet.id == rec.pet_id).first()
-    owner = db.query(Owner).filter(Owner.id == rec.owner_id).first()
-    if pet:
-        obj.pet_name = pet.name
-    if owner:
-        obj.owner_phone = owner.phone
-    return ApiResponse(data=obj)
+    return ApiResponse(data=result)
 
 
 @router.patch(
@@ -234,14 +210,7 @@ def mark_ignored(
     reason: Optional[str] = Body(default=None, description="忽略原因"),
     db: Session = Depends(get_db),
 ):
-    rec = svc.mark_as_ignored(db, reminder_id, reason=reason)
-    if not rec:
+    result = svc.mark_as_ignored(db, reminder_id, reason=reason)
+    if result is None:
         raise HTTPException(status_code=404, detail="提醒记录不存在")
-    obj = VaccineReminderResp.model_validate(rec)
-    pet = db.query(Pet).filter(Pet.id == rec.pet_id).first()
-    owner = db.query(Owner).filter(Owner.id == rec.owner_id).first()
-    if pet:
-        obj.pet_name = pet.name
-    if owner:
-        obj.owner_phone = owner.phone
-    return ApiResponse(data=obj)
+    return ApiResponse(data=result)
